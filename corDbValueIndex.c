@@ -1225,7 +1225,15 @@ static bool termSet(CorDbValueIndex* vxP, char** typeV, LdQTerm* tP, CandSet* se
         {
         case LdQNumber:   n  = strtod(item, NULL);                    ok = rangeTake(dP, KIND_NUMBER, n, n, NULL, NULL, setP); break;
         case LdQDateTime: n  = (double) ldIsoToNanoseconds(item);     ok = rangeTake(dP, KIND_NUMBER, n, n, NULL, NULL, setP); break;
-        case LdQString:   ok = rangeTake(dP, KIND_STRING, 0, 0, item, item, setP);                                             break;
+        case LdQString:
+          ok = rangeTake(dP, KIND_STRING, 0, 0, item, item, setP);
+          // a quoted DateTime (quotedTimeV): a string - and a time, whose values are number entries
+          if ((ok == true) && (tP->value.list.quotedTimeV != NULL) && tP->value.list.quotedTimeV[ix])
+          {
+            n  = (double) ldIsoToNanoseconds(item);
+            ok = rangeTake(dP, KIND_NUMBER, n, n, NULL, NULL, setP);
+          }
+          break;
         case LdQBool:     n  = (strcmp(item, "true") == 0) ? 1 : 0;   ok = rangeTake(dP, KIND_BOOL, n, n, NULL, NULL, setP);   break;
         default:          return false;
         }
@@ -1258,6 +1266,19 @@ static bool termSet(CorDbValueIndex* vxP, char** typeV, LdQTerm* tP, CandSet* se
 
   default:
     return false;
+  }
+
+  //
+  // A quoted DateTime (LdQTerm::quotedTime): a string - its string entries taken above - and a time: values stored
+  // as a time (a DateTime) are number entries. Both sets are candidates; the matcher decides per value.
+  //
+  if ((ok == true) && (tP->valueType == LdQString) && (tP->quotedTime == true))
+  {
+    double t = (double) tP->quotedNs;
+
+    if      (tP->op == LdQEqual)                                   ok = rangeTake(dP, KIND_NUMBER, t, t, NULL, NULL, setP);
+    else if ((tP->op == LdQGreater) || (tP->op == LdQGreaterEq))  ok = rangeTake(dP, KIND_NUMBER, t, INFINITY, NULL, NULL, setP);
+    else if ((tP->op == LdQLess) || (tP->op == LdQLessEq))        ok = rangeTake(dP, KIND_NUMBER, -INFINITY, t, NULL, NULL, setP);
   }
 
   if (ok == true)
