@@ -91,7 +91,7 @@ SOURCES       = corDbGlobals.c corDbIndex.c corDbStore.c corDbLog.c corDbPersist
                 corDbEntityCreate.c corDbEntityBulkCreate.c corDbEntityBulkUpdate.c corDbEntityBulkMerge.c \
                 corDbEntityBulkDelete.c corDbEntityRetrieve.c corDbEntityQuery.c corDbEntityDelete.c \
                 corDbEntityMerge.c corDbEntityReplace.c corDbEntityAttrsSet.c corDbTypeList.c corDbAttrList.c \
-                corDbGeoMatch.c corDbDoc.c corDbSysTimes.c
+                corDbGeoMatch.c corDbDoc.c corDbDocIndex.c corDbSysTimes.c
 
 ifeq ($(COR_FEATURE_TYPE_INDEX),1)
 SOURCES      += corDbTypeIndex.c

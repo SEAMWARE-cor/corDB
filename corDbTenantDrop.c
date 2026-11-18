@@ -19,6 +19,7 @@
 #include "db/Tenant.h"                                   // Tenant
 #include "corDB/corDbHistoryWrite.h"                     // corDbHistoryDrop
 #include "corDB/corDbPersist.h"                          // corDbPersistDrop
+#include "corDB/corDbDocIndex.h"                      // corDbDocIndexFree
 #include "corDB/corDbStore.h"                            // CorDbStore, corDbStoreRetire
 #if COR_FEATURE_TYPE_INDEX
 #include "corDB/corDbTypeIndex.h"                         // corDbTypeIndexFree
@@ -86,6 +87,7 @@ int corDbTenantDrop(Tenant* tenantP)
   containerEmpty(corTreeLookup(storeP->tree, "subscriptions"));
   containerEmpty(corTreeLookup(storeP->tree, "registrations"));
   containerEmpty(corTreeLookup(storeP->tree, "docs"));
+  corDbDocIndexFree(storeP);                          // its entries name the documents just emptied
 
   if (storeP->idToPrevEntity != NULL)
     corHashRelease(storeP->idToPrevEntity);
