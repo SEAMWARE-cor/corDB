@@ -67,6 +67,11 @@ typedef struct CorDbStore
   int                 idxOldMoved;
 
   //
+  // The document store's id indexes, one per collection (corDbDocIndex.c) - same lock, same reason
+  //
+  struct CorDbDocIndex* docIndexes;
+
+  //
   // The tenant's log (corDbPersist.h) - NULL without --dbDir. A write appends its effect to it before
   // the lock goes: lock order is log order.
   //

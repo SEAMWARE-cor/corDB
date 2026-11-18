@@ -33,6 +33,7 @@
 #if COR_FEATURE_DB_INDEXES
 #include "corDB/corDbValueIndex.h"                   // corDbValueIndexDrop
 #endif
+#include "corDB/corDbDocIndex.h"                      // corDbDocIndexFree
 #include "corDB/corDbStore.h"         // Own interface
 
 
@@ -99,6 +100,7 @@ CorDbStore* corDbStoreOf(Tenant* tenantP)
   storeP->tree           = store;
   storeP->entities       = entities;
   storeP->idToPrevEntity = NULL;                     // built on the first entity
+  storeP->docIndexes     = NULL;                     // each built on its collection's first use (corDbDocIndex.c)
   storeP->idxSlots = 0;
   storeP->idxCount = 0;
   storeP->idxOld = NULL;
@@ -171,6 +173,8 @@ void corDbStoreFree(CorDbStore* storeP)
 
   if (storeP->idxOld != NULL)
     corHashRelease(storeP->idxOld);
+
+  corDbDocIndexFree(storeP);
 
 #if COR_FEATURE_TYPE_INDEX
   corDbTypeIndexFree(storeP);

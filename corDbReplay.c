@@ -21,6 +21,7 @@
 #include "corDB/corDbIndex.h"                          // corDbIndexLookup, corDbIndexLink, corDbIndexReplace, corDbIndexUnlink, corDbIndexChanged
 #include "corDB/corDbLog.h"                            // CorDbLogRecord
 #include "corDB/corDbStore.h"                          // CorDbStore
+#include "corDB/corDbDocIndex.h"                      // corDbDocIndex*
 #include "corDB/corDbReplay.h"                         // Own interface
 
 
@@ -229,9 +230,20 @@ bool corDbReplay(CorDbStore* storeP, CorDbLogRecord* recP)
     if (collP == NULL)
       return false;
 
+    //
+    // Through the collection's id index (corDbDocIndex.c), not put/drop's walk: a Service Execution is a
+    // document written three or four times, so a log replays millions of these - a walk each made a start
+    // quadratic
+    //
+    CorNode* oldP = corDbDocIndexLookup(storeP, collP, id, true);
+
     if (recP->op == CorDbLogDocDelete)
     {
-      drop(collP, id);
+      if (oldP != NULL)
+      {
+        corDbDocIndexUnlink(storeP, collP, oldP);
+        corTreeFree(oldP);
+      }
       return true;
     }
 
@@ -244,7 +256,18 @@ bool corDbReplay(CorDbStore* storeP, CorDbLogRecord* recP)
     }
 
     docP->name = NULL;                                // an element of the collection's array, as the write stored it
-    return put(collP, id, docP);
+
+    CorNode* cloneP = corTreeClone(NULL, docP);
+
+    if (cloneP == NULL)
+      return false;
+
+    if (oldP != NULL)
+      corDbDocIndexSwap(oldP, cloneP);
+    else
+      corDbDocIndexAppend(storeP, collP, cloneP);
+
+    return true;
   }
 
   default:

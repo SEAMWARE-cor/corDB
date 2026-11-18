@@ -21,26 +21,8 @@
 #include "corDB/corDbLog.h"                           // CorDbLogDocPut, CorDbLogDocDelete
 #include "corDB/corDbPersist.h"                       // corDbPersistAppend
 #include "corDB/corDbStore.h"                         // COR_DB_READ, COR_DB_WRITE, corDbStoreDocs
+#include "corDB/corDbDocIndex.h"                      // corDbDocIndex*
 #include "corDB/corDbDoc.h"                           // Own interface
-
-
-
-// -----------------------------------------------------------------------------
-//
-// docById - a document of a collection
-//
-static CorNode* docById(CorNode* collP, const char* docId)
-{
-  for (CorNode* dP = (collP != NULL) ? collP->value.head : NULL; dP != NULL; dP = dP->next)
-  {
-    CorNode* idP = corTreeLookup(dP, "id");
-
-    if ((idP != NULL) && (idP->type == CorString) && (strcmp(idP->value.s, docId) == 0))
-      return dP;
-  }
-
-  return NULL;
-}
 
 
 
@@ -147,7 +129,7 @@ int corDbDocCreate(Tenant* tenantP, const char* collection, const char* docId, C
   if (collP == NULL)
     return DB_ERR;
 
-  if (docById(collP, docId) != NULL)
+  if (corDbDocIndexLookup(corDbLockedStore, collP, docId, true) != NULL)
     return DB_ALREADY_EXISTS;
 
   CorNode* cloneP = docClone(docId, docP);
@@ -158,7 +140,7 @@ int corDbDocCreate(Tenant* tenantP, const char* collection, const char* docId, C
     return DB_ERR;
   }
 
-  corTreeChildAdd(collP, cloneP);
+  corDbDocIndexAppend(corDbLockedStore, collP, cloneP);
   logPut(corDbLockedStore->persistP, collection, docId, cloneP);
 
   return DB_OK;
@@ -185,7 +167,7 @@ int corDbDocRetrieveIn(Tenant* tenantP, const char* collection, const char* docI
 {
   COR_DB_READ(tenantP);
 
-  CorNode* dP = docById(corDbStoreDocs(corDbLockedStore, collection, false), docId);
+  CorNode* dP = corDbDocIndexLookup(corDbLockedStore, corDbStoreDocs(corDbLockedStore, collection, false), docId, false);   // a read lock: never builds
 
   if (dP == NULL)
     return DB_NOT_FOUND;
@@ -240,7 +222,7 @@ int corDbDocReplace(Tenant* tenantP, const char* collection, const char* docId, 
   COR_DB_WRITE(tenantP);
 
   CorNode* collP = corDbStoreDocs(corDbLockedStore, collection, false);
-  CorNode* oldP  = docById(collP, docId);
+  CorNode* oldP  = corDbDocIndexLookup(corDbLockedStore, collP, docId, true);
 
   if (oldP == NULL)
     return DB_NOT_FOUND;
@@ -253,9 +235,8 @@ int corDbDocReplace(Tenant* tenantP, const char* collection, const char* docId, 
     return DB_ERR;
   }
 
-  corTreeChildReplace(collP, oldP, cloneP);
-  corTreeFree(oldP);
-  logPut(corDbLockedStore->persistP, collection, docId, cloneP);
+  corDbDocIndexSwap(oldP, cloneP);                    // in place: the node, and so its index entry, stay
+  logPut(corDbLockedStore->persistP, collection, docId, oldP);
 
   return DB_OK;
 }
@@ -274,12 +255,12 @@ int corDbDocDelete(Tenant* tenantP, const char* collection, const char* docId)
   COR_DB_WRITE(tenantP);
 
   CorNode* collP = corDbStoreDocs(corDbLockedStore, collection, false);
-  CorNode* oldP  = docById(collP, docId);
+  CorNode* oldP  = corDbDocIndexLookup(corDbLockedStore, collP, docId, true);
 
   if (oldP == NULL)
     return DB_NOT_FOUND;
 
-  corTreeChildRemove(collP, oldP);
+  corDbDocIndexUnlink(corDbLockedStore, collP, oldP);
   corTreeFree(oldP);
   logDelete(corDbLockedStore->persistP, collection, docId);
 
@@ -301,7 +282,7 @@ int corDbDocMerge(Tenant* tenantP, const char* collection, const char* docId, Co
   COR_DB_WRITE(tenantP);
 
   CorNode* collP = corDbStoreDocs(corDbLockedStore, collection, false);
-  CorNode* oldP  = docById(collP, docId);
+  CorNode* oldP  = corDbDocIndexLookup(corDbLockedStore, collP, docId, true);
 
   if (oldP == NULL)
     return DB_NOT_FOUND;
@@ -349,9 +330,8 @@ int corDbDocMerge(Tenant* tenantP, const char* collection, const char* docId, Co
       corTreeChildAdd(mergedP, cloneP);
   }
 
-  corTreeChildReplace(collP, oldP, mergedP);
-  corTreeFree(oldP);
-  logPut(corDbLockedStore->persistP, collection, docId, mergedP);
+  corDbDocIndexSwap(oldP, mergedP);                   // in place: the node, and so its index entry, stay
+  logPut(corDbLockedStore->persistP, collection, docId, oldP);
 
   return DB_OK;
 }
