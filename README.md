@@ -19,7 +19,7 @@ What it measures against MongoDB is in coraine's
 
 A Cor-Lib like the others: a checkout beside its siblings (`../corTree`, `../corNgsild`, ...), and beside
 `../coraine`, whose plugin interface (`src/lib/db/DbDriver.h`, `src/lib/troe/TroeDriver.h`) it
-implements. The [corLibs](https://github.com/SEAMWARE/corLibs) umbrella builds it with the rest.
+implements. The [corLibs](https://github.com/SEAMWARE-cor/corLibs) umbrella builds it with the rest.
 
 ```console
 make                    # debug (traces in), as coraine's debug broker
@@ -357,7 +357,7 @@ thread; the open segment, which writes append to, never. With it a segment rolls
 store with the option or without it, and a start with it compresses the finished segments a run without it
 left. libzstd (`libzstd.so.1`) is loaded only then; missing, the start is refused: `corDB: --dbCompress needs
 libzstd.so.1 (zstd) - not found`. Given without `--dbDir` it stops the start: `corDB: --dbCompress without --dbDir - the store is in RAM only, there is no disk for it to act on`. On disk, 100 000 Entities: 74 MB plain, 1.4 MB
-compressed ([persistence § 6a](https://github.com/SEAMWARE/corDB/blob/main/doc/persistence.md#6a---dbcompress)).
+compressed ([persistence § 6a](https://github.com/SEAMWARE-cor/corDB/blob/main/doc/persistence.md#6a---dbcompress)).
 
     coraine --database corDB --dbDir /var/lib/coraine --dbCompress
 
@@ -386,7 +386,7 @@ after every start; a change of the declarations (the admin API) builds every ind
 expanded names, and the start refused for a short name (`corDB: --dbValueIndexes: 'speed' is not an IRI -
 ...`) are as for mongoc's option of the same name. Needs a build with `COR_FEATURE_DB_INDEXES` (on by
 default). [Declared indexes](https://github.com/SEAMWARE/coraine/blob/main/doc/installation.md#declared-indexes),
-[corDB's README](https://github.com/SEAMWARE/corDB#queries-by-value---declared-indexes).
+[corDB's README](https://github.com/SEAMWARE-cor/corDB#queries-by-value---declared-indexes).
 
     coraine --database corDB --dbValueIndexes https://example.org/speed
 
