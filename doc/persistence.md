@@ -41,7 +41,9 @@ Each needs the log; none changes its format (§ 7).
 and the files are all per tenant already, and a tenant drop becomes a directory delete. Beside them,
 `<--dbDir>/_storageFormat`: the version of the files' format (§ 4a). A reserved tenant (coraine's
 `--reservedTenants`; corCep's rules) is in `<--dbDir>/_r-<tenant>/` - apart from every ordinary tenant's
-directory, which never holds a `_`; found at start, the directory reserves the name. Built against a coraine
+directory, which never holds a `_`; found at start, the directory reserves the name. Ordinary data always
+wins: an ordinary tenant's directory under a reserved name keeps the name ordinary (a warning, the broker
+starts), and a `_r-<tenant>/` beside it is left alone (an error in the log; nothing deleted). Built against a coraine
 from before reserved tenants, corDB keeps every tenant in the directory of its name, as before.
 
 ```

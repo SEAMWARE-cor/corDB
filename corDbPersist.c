@@ -3701,6 +3701,22 @@ void corDbPersistTenants(void)
     // A reserved tenant's directory reserves the name - whether or not --reservedTenants (or the plugin that
     // reserves it, loaded later) says so: its data is here, and an ordinary tenant of the name would not find it
     //
+    // An ordinary tenant's directory of the name too: that one is served (ordinary data wins), this one left alone
+    if (reserved == true)
+    {
+      char        ordinary[512];
+      char        path[1024];
+      struct stat st;
+
+      tenantDir(name, false, ordinary, sizeof(ordinary));
+      snprintf(path, sizeof(path), "%s/%s", corDbDir, ordinary);
+      if (stat(path, &st) == 0)
+      {
+        COR_E("corDB: '%s/%s' left alone - '%s' is an ordinary tenant's too ('%s' is served); nothing deleted", corDbDir, entryP->d_name, name, path);
+        continue;
+      }
+    }
+
     if ((reserved == true) && (tenantReserve(name) == false))
     {
       COR_E("corDB: '%s/%s': the tenant '%s' could not be reserved - left alone", corDbDir, entryP->d_name, name);
@@ -3708,11 +3724,16 @@ void corDbPersistTenants(void)
     }
 
     //
-    // An ordinary tenant's directory, and the name reserved (--reservedTenants): the tenant would be made a
-    // reserved one, in a directory of its own - and this one's data never seen. Not started on that.
+    // An ordinary tenant's directory, and the name reserved (--reservedTenants): made a reserved tenant, in a
+    // directory of its own, this one's data would never be seen. Ordinary data wins - the name stays an ordinary
+    // tenant's; the broker starts
     //
     if ((reserved == false) && (tenantIsReserved(name) == true))
-      COR_X(1, "corDB: '%s/%s' is an ordinary tenant's data, and '%s' is reserved (--reservedTenants) - not started", corDbDir, entryP->d_name, name);
+    {
+      tenantUnreserve(name);
+      COR_W("corDB: '%s' is not reserved - '%s/%s' holds an ordinary tenant's data under the name; move it, or reserve another name",
+            name, corDbDir, entryP->d_name);
+    }
 #endif
 
     Tenant* tP = tenantGetOrCreate(name);
