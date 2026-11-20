@@ -39,7 +39,10 @@ Each needs the log; none changes its format (§ 7).
 
 **One directory per tenant** (`<--dbDir>/<tenant>/`, `_` for the default tenant): the lock, the store
 and the files are all per tenant already, and a tenant drop becomes a directory delete. Beside them,
-`<--dbDir>/_storageFormat`: the version of the files' format (§ 4a).
+`<--dbDir>/_storageFormat`: the version of the files' format (§ 4a). A reserved tenant (coraine's
+`--reservedTenants`; corCep's rules) is in `<--dbDir>/_r-<tenant>/` - apart from every ordinary tenant's
+directory, which never holds a `_`; found at start, the directory reserves the name. Built against a coraine
+from before reserved tenants, corDB keeps every tenant in the directory of its name, as before.
 
 ```
   snap-000041.cor     the tree as of log sequence 41 (complete, or not there at all)
