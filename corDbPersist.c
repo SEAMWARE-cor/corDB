@@ -18,7 +18,8 @@
 //
 // A tenant's directory is its name with every byte outside [A-Za-z0-9-] written %XX - a tenant name is
 // whatever the NGSILD-Tenant header said, '/' and '..' included - and the default tenant's is '_',
-// which no escaped name can be.
+// which no escaped name can be. A reserved tenant's (coraine's tenantReserve - corCep's rules) is
+// TENANT_RESERVED_DB_MARK, "_r-", before its escaped name: apart from every ordinary tenant's, as '_' is.
 //
 #define _GNU_SOURCE                                    // pthread_setname_np
 #include <dlfcn.h>                                     // dlopen, dlsym
@@ -50,7 +51,21 @@
 #include "corTree/corTreeLookup.h"                     // corTreeLookup
 #include "corRest/CorRestState.h"                      // corRestP
 
-#include "db/Tenant.h"                                 // Tenant, tenantGetOrCreate
+#include "db/Tenant.h"                                 // Tenant, tenantGetOrCreate, tenantReserve, tenantIsReserved
+
+
+
+// -----------------------------------------------------------------------------
+//
+// CORDB_RESERVED_TENANTS - the broker has reserved tenants (coraine's Tenant.h: TENANT_RESERVED_DB_MARK, a
+// Tenant's 'reserved'). Built against a coraine from before them, corDB keeps every tenant in the directory
+// of its name, as it always did.
+//
+#ifdef TENANT_RESERVED_DB_MARK
+#define CORDB_RESERVED_TENANTS  1
+#else
+#define CORDB_RESERVED_TENANTS  0
+#endif
 
 #include "corDB/corDbIndex.h"                         // corDbEntityId
 #include "corDB/corDbGlobals.h"                        // corDbDir, corDbSync, corDbSyncInterval
@@ -311,9 +326,9 @@ static bool passedBy(CorDbPersist* pP)
 
 // -----------------------------------------------------------------------------
 //
-// tenantDir - the tenant's directory name, escaped (see the top of the file)
+// tenantDir - the tenant's directory name, escaped (see the top of the file); a reserved tenant's after "_r-"
 //
-static void tenantDir(const char* name, char* out, int outSize)
+static void tenantDir(const char* name, bool reserved, char* out, int outSize)
 {
   if (name[0] == 0)
   {
@@ -323,6 +338,17 @@ static void tenantDir(const char* name, char* out, int outSize)
 
   static const char hex[] = "0123456789ABCDEF";
   int               o     = 0;
+
+#if CORDB_RESERVED_TENANTS
+  if (reserved == true)
+  {
+    o = snprintf(out, outSize, "%s", TENANT_RESERVED_DB_MARK);
+    if (o >= outSize)
+      o = outSize - 1;
+  }
+#else
+  (void) reserved;
+#endif
 
   for (const unsigned char* p = (const unsigned char*) name; *p != 0 && o < outSize - 4; p++)
   {
@@ -2996,7 +3022,11 @@ CorDbPersist* corDbPersistOpen(Tenant* tenantP, CorDbStore* storeP)
 
   char dir[256];
 
-  tenantDir(tenantP->name, dir, sizeof(dir));
+#if CORDB_RESERVED_TENANTS
+  tenantDir(tenantP->name, tenantP->reserved, dir, sizeof(dir));
+#else
+  tenantDir(tenantP->name, false, dir, sizeof(dir));
+#endif
   if (snprintf(pP->dir, sizeof(pP->dir), "%s/%s", corDbDir, dir) >= (int) sizeof(pP->dir))
   {
     COR_E("corDB: --dbDir '%s' too long - the tenant '%s' is NOT persistent", corDbDir, tenantP->name);
@@ -3650,13 +3680,61 @@ void corDbPersistTenants(void)
     if ((entryP->d_name[0] == '.') || (strcmp(entryP->d_name, "_") == 0) || (strncmp(entryP->d_name, "_storageFormat", 14) == 0))
       continue;                                        // not a tenant: the default tenant's, the storage format (and its .tmp)
 
-    char name[256];
+    char        name[256];
+    const char* escaped  = entryP->d_name;
+#if CORDB_RESERVED_TENANTS
+    int         markLen  = strlen(TENANT_RESERVED_DB_MARK);
+    bool        reserved = (strncmp(escaped, TENANT_RESERVED_DB_MARK, markLen) == 0);
 
-    if (unescape(entryP->d_name, name, sizeof(name)) == false)
+    if (reserved == true)
+      escaped = &escaped[markLen];
+#endif
+
+    if (unescape(escaped, name, sizeof(name)) == false)
     {
       COR_W("corDB: '%s/%s' is not a tenant directory - left alone", corDbDir, entryP->d_name);
       continue;
     }
+
+#if CORDB_RESERVED_TENANTS
+    //
+    // A reserved tenant's directory reserves the name - whether or not --reservedTenants (or the plugin that
+    // reserves it, loaded later) says so: its data is here, and an ordinary tenant of the name would not find it
+    //
+    // An ordinary tenant's directory of the name too: that one is served (ordinary data wins), this one left alone
+    if (reserved == true)
+    {
+      char        ordinary[512];
+      char        path[1024];
+      struct stat st;
+
+      tenantDir(name, false, ordinary, sizeof(ordinary));
+      snprintf(path, sizeof(path), "%s/%s", corDbDir, ordinary);
+      if (stat(path, &st) == 0)
+      {
+        COR_E("corDB: '%s/%s' left alone - '%s' is an ordinary tenant's too ('%s' is served); nothing deleted", corDbDir, entryP->d_name, name, path);
+        continue;
+      }
+    }
+
+    if ((reserved == true) && (tenantReserve(name) == false))
+    {
+      COR_E("corDB: '%s/%s': the tenant '%s' could not be reserved - left alone", corDbDir, entryP->d_name, name);
+      continue;
+    }
+
+    //
+    // An ordinary tenant's directory, and the name reserved (--reservedTenants): made a reserved tenant, in a
+    // directory of its own, this one's data would never be seen. Ordinary data wins - the name stays an ordinary
+    // tenant's; the broker starts
+    //
+    if ((reserved == false) && (tenantIsReserved(name) == true))
+    {
+      tenantUnreserve(name);
+      COR_W("corDB: '%s' is not reserved - '%s/%s' holds an ordinary tenant's data under the name; move it, or reserve another name",
+            name, corDbDir, entryP->d_name);
+    }
+#endif
 
     Tenant* tP = tenantGetOrCreate(name);
 
