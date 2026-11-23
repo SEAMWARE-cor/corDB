@@ -64,8 +64,19 @@ ifeq ($(filter $(COR_WITH_GEOQ),0 1),)
 $(error COR_WITH_GEOQ is 1 or 0, not '$(COR_WITH_GEOQ)')
 endif
 
+#
+# COR_WITH_TROE_CORDB - 1 | 0, as the broker's makefile passes it: corDB's own temporal history (--troe corDB).
+# 0 builds corDB.so without its TRoE part (corDbTroe.c, corDbTroeWrite.c): no troeRegister - the broker then
+# offers no --troe corDB - and no history kept (corDbHistoryOn is set by troeRegister only), as ramDB.so. In the
+# flags too (COR_FEATURE_TROE_CORDB): a change of it rebuilds and relinks
+#
+COR_WITH_TROE_CORDB ?= 1
+ifeq ($(filter $(COR_WITH_TROE_CORDB),0 1),)
+$(error COR_WITH_TROE_CORDB is 1 or 0, not '$(COR_WITH_TROE_CORDB)')
+endif
+
 INCLUDE       = -I$(COR_LIBS) -I$(CORAINE)/src/lib -I$(CORAINE)/src/plugins
-DEFINES       = -DLOG_ON -DCOR_FEATURE_SUBSCRIPTIONS=$(COR_FEATURE_SUBSCRIPTIONS) -DCOR_FEATURE_REGISTRATIONS=$(COR_FEATURE_REGISTRATIONS) -DCOR_FEATURE_TYPE_INDEX=$(COR_FEATURE_TYPE_INDEX) -DCOR_FEATURE_DB_INDEXES=$(COR_FEATURE_DB_INDEXES) -DCOR_FEATURE_GEOQ=$(COR_WITH_GEOQ) -DCOR_DB_TENANT_RELEASE=$(COR_DB_TENANT_RELEASE)
+DEFINES       = -DLOG_ON -DCOR_FEATURE_SUBSCRIPTIONS=$(COR_FEATURE_SUBSCRIPTIONS) -DCOR_FEATURE_REGISTRATIONS=$(COR_FEATURE_REGISTRATIONS) -DCOR_FEATURE_TYPE_INDEX=$(COR_FEATURE_TYPE_INDEX) -DCOR_FEATURE_DB_INDEXES=$(COR_FEATURE_DB_INDEXES) -DCOR_FEATURE_GEOQ=$(COR_WITH_GEOQ) -DCOR_FEATURE_TROE_CORDB=$(COR_WITH_TROE_CORDB) -DCOR_DB_TENANT_RELEASE=$(COR_DB_TENANT_RELEASE)
 # The current-state plugin's version; troe/corDbRegister.c defines its own
 VERSION_DEF   = -DPLUGIN_VERSION=\"0.2.0\"
 CFLAGS        = -Wall -Werror -Wundef -fPIC $(INCLUDE) $(DEFINES) -MMD -MP $(EXTRA_CFLAGS)
@@ -95,6 +106,10 @@ SOURCES       = corDbGlobals.c corDbIndex.c corDbStore.c corDbLog.c corDbPersist
 
 ifeq ($(COR_FEATURE_TYPE_INDEX),1)
 SOURCES      += corDbTypeIndex.c
+endif
+
+ifeq ($(COR_WITH_TROE_CORDB),0)
+SOURCES      := $(filter-out corDbTroe.c corDbTroeWrite.c,$(SOURCES))
 endif
 
 ifeq ($(COR_FEATURE_DB_INDEXES),1)
