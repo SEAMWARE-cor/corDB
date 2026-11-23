@@ -249,11 +249,13 @@ static bool entityMatch(CorNode* eP, DbQueryFilter* filterP, DbQueryFilter* dist
     if (!corDbGeoMatch(eP, filterP, &geoDistance))
       return false;
   }
-  else if (distFilterP != NULL)
+
+  if (distFilterP != NULL)
   {
-    // § 7.6.2.2 sort-by-distance (no filtering): distance from orderFrom to the
-    // named GeoProperty. A missing/non-Point GeoProperty leaves geoDistance -1
-    // (the entity is kept but ranks last).
+    // § 7.6.2 sort-by-distance (no filtering): the distance from the reference geometry (orderFrom,
+    // orderGeometry) to the named GeoProperty - replacing a georel=near's, which is from the georel's
+    // reference. An entity without the GeoProperty keeps -1 (it is kept, and ranks last).
+    geoDistance = -1;
     corDbGeoMatch(eP, distFilterP, &geoDistance);
   }
 
@@ -443,16 +445,21 @@ static int entityQueryOver(CorDbStore* storeP, Tenant* tenantP, CorNode* entitie
   GeoCand* cands = (GeoCand*) corAlloc(&corRest.kalloc, sizeof(GeoCand) * (total > 0 ? total : 1));
   int      nCand = 0;
 
-  // § 7.6.2.2 sort-by-distance — a synthetic near filter reused per entity to
-  // compute the distance from the orderFrom Point to the named GeoProperty.
+  // § 7.6.2 sort-by-distance — a synthetic near filter reused per entity to compute the distance from
+  // the reference geometry (orderFrom, of the type orderGeometry names - Point when absent) to the named
+  // GeoProperty. Beside a georel too: the georel filters, this orders.
   DbQueryFilter  distFilter;
   LdGeoRel       distRel = { LdGeoNear, -1, -1 };
   DbQueryFilter* distFilterP = NULL;
-  if (filterP != NULL && filterP->distGeoproperty != NULL && filterP->geoRel == NULL)
+  if (filterP != NULL && filterP->distGeoproperty != NULL)
   {
     distFilter             = *filterP;
     distFilter.geoRel      = &distRel;
+#ifdef DB_QUERY_FILTER_DIST_GEOMETRY
+    distFilter.geometry    = (filterP->distGeometry != NULL) ? filterP->distGeometry : (char*) "Point";
+#else
     distFilter.geometry    = (char*) "Point";
+#endif
     distFilter.coordinates = filterP->distFrom;
     distFilter.geoproperty = filterP->distGeoproperty;
     distFilterP            = &distFilter;
@@ -652,15 +659,15 @@ static int entityQueryOver(CorDbStore* storeP, Tenant* tenantP, CorNode* entitie
   // same). Sort by distance before paginating so offset/limit page over the
   // distance order, not the store order. Other georels keep store order.
   //
-  if (filterP != NULL && filterP->geoRel != NULL && filterP->geoRel->rel == LdGeoNear)
-    qsort(cands, nCand, sizeof(GeoCand), geoCandCmp);
-  else if (filterP != NULL && filterP->distGeoproperty != NULL)
+  if (filterP != NULL && filterP->distGeoproperty != NULL)
   {
-    // § 7.6.2.2 sort-by-distance — geo-bearing entities nearest/farthest first,
-    // non-geo entities last. Paginate over this order, like the near path.
+    // § 7.6.2 sort-by-distance — geo-bearing entities nearest/farthest first, non-geo entities last
+    // (beside a georel=near too: the distances are the order's). Paginate over this order.
     distDescCand = filterP->distDesc;
     qsort(cands, nCand, sizeof(GeoCand), distCandCmp);
   }
+  else if (filterP != NULL && filterP->geoRel != NULL && filterP->geoRel->rel == LdGeoNear)
+    qsort(cands, nCand, sizeof(GeoCand), geoCandCmp);
 
   //
   // Paginate (offset/limit) and render. limit == 0 means count-only, and
